@@ -17,7 +17,7 @@ public class KMeans {
 	
 	public static final String SPLIT_TOKENS = "[!\"#$%&'()*+,./:;<=>?\\[\\]^`{|}~\\s]"; // missing: [_-@]
 
-	public final static String DATA_SRC = "/home/quyu_kong/Downloads/LabML/data/two_newsgroups";
+	public final static String DATA_SRC = "/Users/kongquyu/Downloads/blog_data_test";
 	
 	public final static boolean REMOVE_STOPWORDS = true;
 	public final static int     NUM_TOP_WORDS    = 1000;
@@ -27,8 +27,9 @@ public class KMeans {
 	public final ArrayList<String> fileNames = new ArrayList<>();
 	public final ArrayList<ArrayList<Integer>> clusters = new ArrayList<>();
 	public final ArrayList<Map<String, Double>> centroids = new ArrayList<>();
+	public final ArrayList<Integer> reTrainCentroids = new ArrayList<>();
 	
-	public KMeans(String directory, HashMap<String,Integer> feature2index, int k) {
+	public KMeans(String directory, HashMap<String,Integer> feature2index, int k, boolean useRetrain, ArrayList<Integer> reTrainCentroids) {
 		//create clusters and will store the index of file into clusters
 		for (int i = 0; i < k; i++) {
 			clusters.add(new ArrayList<>());
@@ -72,9 +73,11 @@ public class KMeans {
 				if (m.containsKey(word)) m.put(word, m.get(word) * idf);
 			}
 		}
-		
-		randomInitClusters();
-		
+		if (useRetrain) {
+			for (int i = 0; i < k; i++) centroids.get(i).putAll(fileWordFrequency.get(reTrainCentroids.get(i)));
+		} else {
+			farthestInit(feature2index);
+		}
 		boolean running = true;
 		//k-means
 		while (running) {
@@ -157,11 +160,12 @@ public class KMeans {
 					}
 				}
 			}
-			
+			reTrainCentroids.add(simd[0]);
 			for (int j = 0; j < num; j++) {
 				System.out.println((j+1)+": "+fileNames.get(simd[j]));
 			}
 		}
+		
 	}
 	
 //	private double euclidean(Map<String, Double> m1, Map<String, Double> m2) {
@@ -226,18 +230,56 @@ public class KMeans {
 		for (int i = 0; i < clusters.size(); i++) centroids.get(i).putAll(fileWordFrequency.get(randomDocs.get(i)));
 	}
 	
+	private void farthestInit(HashMap<String,Integer> feature2index) {
+		int numOfDocs = fileWordFrequency.size();
+		Random rd = new Random();
+		List<Integer> randomDocs = new ArrayList<>();
+		int start = rd.nextInt(numOfDocs);
+		randomDocs.add(start);
+		Map<String, Double> startDoc = new HashMap<>(fileWordFrequency.get(start));
+		for (int o = 0; o < clusters.size() - 1; o++) {
+			double tmp = 0d;
+			int docnum = 0;
+			int i = 0;
+			for (Map<String, Double> m : fileWordFrequency) {
+				double sim = cosineSim(m, startDoc);
+				if (tmp < sim) {
+					docnum = i;
+					tmp = sim;
+				}
+				i++;
+			}
+			randomDocs.add(docnum);
+			for (Map.Entry<String, Integer> e : feature2index.entrySet()) {
+				if (startDoc.containsKey(e.getKey()) && fileWordFrequency.get(docnum).containsKey(e.getKey())) {
+					startDoc.put(e.getKey(), (startDoc.get(e.getKey()) + fileWordFrequency.get(docnum).get(e.getKey())) / 2);
+					
+				}else if (startDoc.containsKey(e.getKey())) {
+					startDoc.put(e.getKey(), startDoc.get(e.getKey()) / 2 );
+				}else if ( fileWordFrequency.get(docnum).containsKey(e.getKey())) {
+					startDoc.put(e.getKey(), fileWordFrequency.get(docnum).get(e.getKey()) / 2 );
+				}
+			}
+		}
+		for (int i = 0; i<3;i++)
+		System.out.println(randomDocs.get(i));
+		for (int i = 0; i < clusters.size(); i++) centroids.get(i).putAll(fileWordFrequency.get(randomDocs.get(i)));
+
+	}
 	public static void main(String[] args) {
 		UnigramBuilder ub = new UnigramBuilder(
 				DATA_SRC, 
 				NUM_TOP_WORDS,
 				REMOVE_STOPWORDS);
-		int k;
-		Scanner sc = new Scanner(System.in);
-		System.out.println("Please enter the number of k:");
-		k = sc.nextInt();
-		sc.close();
-		KMeans km = new KMeans(DATA_SRC, ub._topWord2Index, k);
+		int k = 3;
+//		Scanner sc = new Scanner(System.in);
+//		System.out.println("Please enter the number of k:");
+//		k = sc.nextInt();
+//		sc.close();
+		KMeans km = new KMeans(DATA_SRC, ub._topWord2Index, k, false, new ArrayList<>());
 		km.printTop(5);
+		//KMeans km2 = new KMeans(DATA_SRC, ub._topWord2Index, k, true, km.reTrainCentroids);
+		//km2.printTop(5);
 	}
 
 }
